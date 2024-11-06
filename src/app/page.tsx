@@ -1,20 +1,22 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Papa from "papaparse";
-import { motion } from "framer-motion"; // Animaciones
+import { motion } from "framer-motion";
 
 interface Coordinates {
   lat: number;
   lon: number;
 }
 
-class CoordinatesService {
+// Clase base para los servicios de coordenadas
+export class CoordinatesService {
   async getCoordinates(city: string, country: string): Promise<Coordinates | null> {
     throw new Error("Método no implementado");
   }
 }
 
-class NominatimService extends CoordinatesService {
+// Servicio para obtener coordenadas usando la API de Nominatim
+export class NominatimService extends CoordinatesService {
   async getCoordinates(city: string, country: string): Promise<Coordinates | null> {
     try {
       const response = await fetch(
@@ -35,7 +37,8 @@ class NominatimService extends CoordinatesService {
   }
 }
 
-class CSVService extends CoordinatesService {
+// Servicio para obtener coordenadas desde un archivo CSV
+export class CSVService extends CoordinatesService {
   private data: any[] = [];
 
   constructor() {
@@ -61,6 +64,7 @@ class CSVService extends CoordinatesService {
 
     const cityData = this.data.find(
       (item) =>
+        item.city_ascii && item.country &&
         item.city_ascii.toLowerCase() === city.toLowerCase() &&
         item.country.toLowerCase() === country.toLowerCase()
     );
@@ -75,7 +79,8 @@ class CSVService extends CoordinatesService {
   }
 }
 
-const calculateDistance = (coord1: Coordinates, coord2: Coordinates): number => {
+// Función para calcular la distancia entre dos coordenadas
+export const calculateDistance = (coord1: Coordinates, coord2: Coordinates): number => {
   const R = 6371;
   const dLat = deg2rad(coord2.lat - coord1.lat);
   const dLon = deg2rad(coord2.lon - coord1.lon);
@@ -88,6 +93,7 @@ const calculateDistance = (coord1: Coordinates, coord2: Coordinates): number => 
 };
 
 const deg2rad = (deg: number): number => deg * (Math.PI / 180);
+
 
 export default function Home() {
   const [city1, setCity1] = useState("");
@@ -111,6 +117,13 @@ export default function Home() {
       alert("No se pudieron obtener las coordenadas.");
     }
   };
+
+  // Ejecutar pruebas solo en modo de desarrollo
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      ejecutarPruebas();
+    }
+  }, []);
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -200,4 +213,67 @@ export default function Home() {
       </motion.div>
     </div>
   );
+}
+
+// Funciones de prueba
+async function ejecutarPruebas() {
+  console.log("Ejecutando pruebas...");
+
+  // Prueba de éxito
+  await testCasoExito();
+
+  // Prueba de ciudad inexistente
+  await testCiudadInexistente();
+
+  // Prueba de la misma ciudad dos veces
+  await testMismaCiudadDosVeces();
+
+  console.log("Pruebas finalizadas.");
+}
+
+async function testCasoExito() {
+  console.log("Prueba de éxito: Iniciando prueba entre Lima, Perú y Londres, Reino Unido");
+
+  const service = new CSVService();
+  const coords1 = await service.getCoordinates("Lima", "Perú");
+  const coords2 = await service.getCoordinates("Londres", "Reino Unido");
+
+  if (coords1 && coords2) {
+    const distancia = calculateDistance(coords1, coords2);
+    console.log(`Distancia calculada con éxito: ${distancia.toFixed(2)} km`);
+  } else {
+    console.error("Error: No se pudieron obtener las coordenadas para una de las ciudades.");
+  }
+}
+
+async function testCiudadInexistente() {
+  console.log("Prueba de caso extremo: Ciudad inexistente 'Atlantis, Mythland'");
+
+  const service = new CSVService();
+  const coords = await service.getCoordinates("Atlantis", "Mythland");
+
+  if (!coords) {
+    console.log("Prueba exitosa: No se encontraron coordenadas para 'Atlantis, Mythland'");
+  } else {
+    console.error("Error: Se encontraron coordenadas para una ciudad inexistente.");
+  }
+}
+
+async function testMismaCiudadDosVeces() {
+  console.log("Prueba de caso extremo: Misma ciudad dos veces 'Lima, Perú'");
+
+  const service = new CSVService();
+  const coords1 = await service.getCoordinates("Lima", "Perú");
+  const coords2 = await service.getCoordinates("Lima", "Perú");
+
+  if (coords1 && coords2) {
+    const distancia = calculateDistance(coords1, coords2);
+    if (distancia === 0) {
+      console.log("Prueba exitosa: La distancia entre la misma ciudad es 0 km");
+    } else {
+      console.error(`Error: La distancia no fue 0, sino ${distancia.toFixed(2)} km`);
+    }
+  } else {
+    console.error("Error: No se pudieron obtener las coordenadas para Lima, Perú.");
+  }
 }
